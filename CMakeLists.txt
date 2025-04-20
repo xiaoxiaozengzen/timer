@@ -16,13 +16,6 @@ target_include_directories(
   $<INSTALL_INTERFACE:include>
 )
 
-add_executable(timer_example example/example.cpp)
-target_link_libraries(timer_example PRIVATE timer)
-target_include_directories(
-  timer_example PRIVATE
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>
-)
-
+add_subdirectory(example)
 add_subdirectory(timerfd)
 add_subdirectory(epoll)

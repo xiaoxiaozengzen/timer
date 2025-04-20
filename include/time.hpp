@@ -1,6 +1,10 @@
 #ifndef TIME_HPP
 #define TIME_HPP
 
+#include <sys/timerfd.h>
+#include <unistd.h>
+#include <sys/epoll.h>
+
 #include <iostream>
 #include <chrono>
 #include <thread>
@@ -33,21 +37,55 @@ public:
   Timer& operator=(Timer&&) = delete;
 
   void start() {
-    if(period_.count() <= 0) {
-      std::cerr << "Period must be no-negative" << std::endl;
-      return;
+    if(period_ < std::chrono::nanoseconds(0)) {
+      throw std::runtime_error("period must be greater than 0");
     }
 
-    if(started_) {
-      std::cout << "Timer already started" << std::endl;
-      return;
+    timer_fd_ = timerfd_create(CLOCK_REALTIME, TFD_NONBLOCK | TFD_CLOEXEC);
+    if(timer_fd_ == -1) {
+      throw std::runtime_error("timerfd_create failed");
     }
-    
-    std::cout << "Timer started" << std::endl;
-    started_.store(true);
+    struct itimerspec duration;
+    duration.it_interval.tv_sec = period_.count() / 1000000000;
+    duration.it_interval.tv_nsec = period_.count() % 1000000000;
+    duration.it_value.tv_sec = period_.count() / 1000000000;
+    duration.it_value.tv_nsec = period_.count() % 1000000000;
+    int ret = timerfd_settime(timer_fd_, 0, &duration, nullptr);
+    if(ret == -1) {
+      throw std::runtime_error("timerfd_settime failed");
+    }
 
-    start_time_ = Clock::now();
-    last_call_time_ = start_time_;
+    epoll_fd_ = epoll_create(1);
+    if(epoll_fd_ == -1) {
+      throw std::runtime_error("epoll_create1 failed");
+    }
+    struct epoll_event ev;
+    ev.events = EPOLLIN;
+    ev.data.fd = timer_fd_;
+    ret = epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, timer_fd_, &ev);
+    if(ret == -1) {
+      throw std::runtime_error("epoll_ctl failed");
+    }
+
+    work_thread_ = std::thread(&Timer::work, this);
+  }
+
+  void work() {
+    while(true) {
+      struct epoll_event ev;
+      int ret = epoll_wait(epoll_fd_, &ev, 1, -1);
+      if(ret == -1) {
+        throw std::runtime_error("epoll_wait failed");
+      }
+      if(ev.data.fd == timer_fd_) {
+        uint64_t num;
+        ret = read(timer_fd_, &num, sizeof(num));
+        if(ret == -1) {
+          throw std::runtime_error("read failed");
+        }
+        execute_callback();
+      }
+    }
   }
 
   void execute_callback() {
@@ -63,20 +101,25 @@ public:
   }
 
   ~Timer() {
+    if(timer_fd_ != -1) {
+      close(timer_fd_);
+    }
+    if(epoll_fd_ != -1) {
+      close(epoll_fd_);
+    }
+    if(work_thread_.joinable()) {
+      work_thread_.join();
+    }
   }
 
 private:
-  typename Clock::time_point start_time_;
-  typename Clock::time_point last_call_time_;
-  typename Clock::time_point next_call_time_;
-  
-  
-
-  std::atomic<bool> started_{false};
-  std::atomic<bool> stopped_{false};
-
-  std::chrono::nanoseconds period_;
+  std::chrono::nanoseconds period_{-1};
   FunT call_back_;
+
+  int timer_fd_{-1};
+  int epoll_fd_{-1};
+
+  std::thread work_thread_;
 };
 
 template<typename Callback>
