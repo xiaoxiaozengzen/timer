@@ -65,6 +65,10 @@
  * @param timeout 超时时间(即epoll_wait会被阻塞的时间)，单位为毫秒
  *                如果timeout为-1，则epoll_wait会一直阻塞直到有事件发生
  *                如果timeout为0，则epoll_wait不会阻塞，立即返回
+ * 
+ * @note events数组大小会影响一次epoll_wait返回的事件数量
+ *       如果events数组大小小于epoll_wait返回的事件数量，则只会返回events数组大小的事件
+ *       这可能导致程序多次调用epoll_wait才能获取到所有的事件，从而增加系统调用次数
  */
 
 
