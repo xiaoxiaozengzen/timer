@@ -5,6 +5,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <sys/epoll.h>
+#include <cstdint>
 
 int main() {
 
@@ -30,19 +31,24 @@ int main() {
     }
 
     char buf[1024]{};
-    strcpy(buf, "Hello world");
-    int len = send(socket_fd, buf, strlen(buf), 0);
-    if (len < 0) {
-        perror("send error");
-        exit(1);
-    }
+    uint64_t counter = 0;
+    while(true) {
+        counter++;
+        sprintf(buf, "Hello from client! Counter: %lu", counter);
+        int len = send(socket_fd, buf, strlen(buf), 0);
+        if (len < 0) {
+            perror("send error");
+            exit(1);
+        }
 
-    len = recv(socket_fd, buf, sizeof(buf), 0);
-    if (len < 0) {
-        perror("recv error");
-        exit(1);
+        len = recv(socket_fd, buf, sizeof(buf), 0);
+        if (len < 0) {
+            perror("recv error");
+            exit(1);
+        }
+        printf("client recv: %s\n", buf);
+        sleep(1);  // 每秒发送一次数据       
     }
-    printf("client recv: %s\n", buf);
 
     // 关闭 socket
     close(socket_fd);

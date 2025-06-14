@@ -2,6 +2,8 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <errno.h>
+#include <string.h>
 
 int main() {
 
@@ -39,13 +41,22 @@ int main() {
     printf("eventfd_write ret %d\n", ret);
   }
 
+  eventfd_t write_value2 = 3;
+  ret = eventfd_write(fd, write_value2);
+  if(ret == -1) {
+    printf("eventfd_write failed\n");
+    return -1;
+  } else {
+    printf("eventfd_write ret %d\n", ret);
+  }
+
   /**
    * @brief Read from the eventfd object
    * 
    * @param fd File descriptor of the eventfd object
    * @param value Pointer to store the read value
    * 
-   * @note eventfd_read()函数用于从eventfd对象中读取一个64位的无符号整数, 并重设置计数器
+   * @note eventfd_read()函数用于从eventfd对象中读取一个64位的无符号整数, 并重设置计数器为0
    * @note 如果计数器的值为0，则会阻塞直到有事件发生。可以在创建eventfd对象时使用EFD_NONBLOCK标志来避免阻塞
    */
   eventfd_t value;
@@ -55,6 +66,21 @@ int main() {
     return -1;
   } else {
     printf("eventfd_read ret %ld\n", value);
+  }
+
+  eventfd_t value2;
+  ret = eventfd_read(fd, &value2);
+  if(ret == -1) {
+    printf("eventfd_read failed\n");
+    if(errno == EAGAIN) {
+      // EAGAIN: Resource temporarily unavailable in non-blocking mode
+      printf("eventfd_read error %s\n", strerror(errno));
+    } else {
+      perror("eventfd_read error");
+      return -1; // Other error
+    }
+  } else {
+    printf("eventfd_read ret %ld\n", value2);
   }
 
   eventfd_write(fd, 1);

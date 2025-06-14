@@ -66,8 +66,11 @@
  *                如果timeout为-1，则epoll_wait会一直阻塞直到有事件发生
  *                如果timeout为0，则epoll_wait不会阻塞，立即返回
  * 
+ * @return 返回需要处理的事件数量，0表示超时，-1表示出错
+ * 
  * @note events数组大小会影响一次epoll_wait返回的事件数量
  *       如果events数组大小小于epoll_wait返回的事件数量，则只会返回events数组大小的事件
+ *       其余事件不会被丢弃，而是保留在内核中，等待下一次epoll_wait调用
  *       这可能导致程序多次调用epoll_wait才能获取到所有的事件，从而增加系统调用次数
  */
 
@@ -132,7 +135,7 @@ int main() {
         exit(1);
     }
 
-    struct epoll_event evs[1024];
+    struct epoll_event evs[4];
     int size = sizeof(evs) / sizeof(struct epoll_event);
 
     // 持续检测
@@ -154,15 +157,12 @@ int main() {
                 char buf[1024]{};
                 int len = recv(cur_fd, buf, sizeof(buf), 0);
                 if (len == 0) {
-                    printf("客户端 %d 已经断开了连接\n", cur_fd);
+                    printf("from client: %d is donwlink\n", cur_fd);
                     epoll_ctl(epoll_fd, EPOLL_CTL_DEL, cur_fd, NULL);
                     close(cur_fd);
                 } else if (len > 0) {
-                    printf("客户端说: %s\n", buf);
-                    std::string text;
-                    getline(std::cin, text);  // 等待输入
-                    text.insert(0, "from server: ");
-                    text.push_back('\n');
+                    printf("client %d said: %s\n", cur_fd, buf);
+                    std::string text = "from server: nihao a!";
                     send(cur_fd, text.c_str(), text.length(), 0);
                 } else {
                     perror("socket recv error");
